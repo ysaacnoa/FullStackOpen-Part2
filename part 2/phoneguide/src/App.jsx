@@ -3,19 +3,19 @@ import { useState, useEffect } from "react";
 import PersonForm from "../components/PersonForm";
 import Filter from "../components/Filter";
 import Persons from "../components/Persons";
+import personServices from "../services/persons";
+import Message from "../components/Message";
 
-import axios from 'axios'
 
 export default function App() {
   const [persons, setPersons] = useState([]);
+  const [message, setMessage] = useState({ text: '', type: '' });
 
   const hookPersons = () =>{
     console.log('effect');
-    axios
-      .get('http://localhost:3000/persons')
-      .then(res =>{
-        setPersons(res.data)
-      })
+    personServices
+      .getPersons()
+      .then(initialPersons => setPersons(initialPersons))
   }
 
   useEffect(hookPersons,[])
@@ -29,22 +29,65 @@ export default function App() {
     const objectPerson = {
       name: newName,
       number: newPhone,
-      id: persons.length + 1,
     };
-
-    if (newName === "" || newPhone === "") return;
-
-    if (persons.find((el) => el.name === newName))
-      return alert(`${newName} is already added to phonebook`);
     
     console.log(objectPerson);
+    if (newName === "" || newPhone === "") return;
 
-    //update object
-    setPersons(persons.concat(objectPerson));
+    const existingPerson = persons.find(person => person.name === newName)
 
-    //clean inputs
-    setNewName("");
-    setNewPhone("");
+    if(existingPerson){
+      const confirmed = window.confirm(`${newName} is already added to phonebook, replace the old number with a new one?`)
+      
+      const newPerson = {...existingPerson, number: newPhone} 
+
+      if(confirmed){
+        personServices
+          .updatedPhone(existingPerson.id , newPerson)
+          .then(returnedPerson => {
+            const updatedPersons = persons.map(person => person.id !== existingPerson.id ? person : returnedPerson)
+            setPersons(updatedPersons);
+            setNewName("");
+            setNewPhone("");
+            setMessage({
+              text: `${returnedPerson.name} number has been update`,
+              type: 'success'
+            })
+            setTimeout(()=>{
+              setMessage({text:null, type:null})
+            },5000)
+          })
+          .catch(
+            setMessage({
+              text: `Information of ${existingPerson.name} has already been removed from server`,
+              type: 'error'
+            }),
+            setTimeout(()=>{
+              setMessage({text:null, type:null})
+            },5000),
+            setNewName(""),
+            setNewPhone("")
+          )
+      }
+    }else{
+      //update object persons
+      personServices
+        .addContact(objectPerson)
+        .then(newPerson => {
+          setPersons(persons.concat(newPerson))
+          //clean inputs
+          setNewName("");
+          setNewPhone("");
+          setMessage({
+            text: `${newPerson.name} has been added in your contacts`,
+            type: 'success'
+          })
+            setTimeout(()=>{
+              setMessage({text:null, type:null})
+            },5000)
+        })
+    }
+
   };
 
 
@@ -61,6 +104,7 @@ export default function App() {
   return (
     <section>
       <h2>Phonebook</h2>
+      <Message message={message.text} type={message.type}/>
       <Filter
         text="filter shown with"
         filterPerson={filterPerson}
@@ -78,6 +122,7 @@ export default function App() {
       <Persons
         persons={persons}
         filterPerson={filterPerson}
+        setPersons={setPersons}
       />
     </section>
   );
